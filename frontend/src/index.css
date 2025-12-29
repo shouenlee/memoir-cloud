@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Light mode (default) */
+body {
+  @apply bg-gallery-light-bg text-gallery-light-text;
+  min-height: 100vh;
+}
+
+/* Dark mode */
+body.dark {
+  @apply bg-gallery-dark-bg text-gallery-dark-text;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-gray-700 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400 dark:bg-gray-600;
+}
+
+/* Photo grid masonry-like layout */
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .photo-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .photo-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 1440px) {
+  .photo-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* Photo hover effects */
+.photo-item {
+  @apply relative overflow-hidden rounded-lg cursor-pointer;
+  @apply transition-transform duration-200 ease-out;
+}
+
+.photo-item:hover {
+  @apply scale-[1.02] shadow-lg;
+}
+
+.photo-item img {
+  @apply w-full h-full object-cover;
+}
+
+/* Lightbox overlay */
+.lightbox-overlay {
+  @apply fixed inset-0 z-50 bg-black/90 backdrop-blur-sm;
+  @apply flex items-center justify-center;
+}
+
+/* Loading skeleton */
+.skeleton {
+  @apply animate-pulse bg-gray-200 dark:bg-gray-700 rounded;
+}
