@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memoir-uploader"
+version = "1.0.0"
+description = "CLI tool for uploading photos to Memoir Cloud"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Memoir Cloud"}
+]
+dependencies = [
+    "click>=8.1.0",
+    "pillow>=10.0.0",
+    "pillow-heif>=0.14.0",
+    "azure-storage-blob>=12.19.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-mock>=3.0.0",
+]
+
+[project.scripts]
+memoir-uploader = "memoir_uploader.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["memoir_uploader*"]
