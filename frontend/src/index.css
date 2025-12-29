@@ -52,14 +52,12 @@ body.dark {
 @media (min-width: 640px) {
   .photo-grid {
     grid-template-columns: repeat(3, 1fr);
-    gap: 0.75rem;
   }
 }
 
 @media (min-width: 1024px) {
   .photo-grid {
     grid-template-columns: repeat(4, 1fr);
-    gap: 1rem;
   }
 }
 
@@ -69,14 +67,20 @@ body.dark {
   }
 }
 
+@media (min-width: 1920px) {
+  .photo-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
 /* Photo hover effects */
 .photo-item {
-  @apply relative overflow-hidden rounded-lg cursor-pointer;
-  @apply transition-transform duration-200 ease-out;
+  @apply relative overflow-hidden cursor-pointer;
+  @apply transition-opacity duration-200 ease-out;
 }
 
 .photo-item:hover {
-  @apply scale-[1.02] shadow-lg;
+  @apply opacity-90;
 }
 
 .photo-item img {

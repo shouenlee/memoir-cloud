@@ -24,7 +24,7 @@ function App() {
   return (
     <div className="min-h-screen">
       <Header years={years} />
-      <main className="container mx-auto px-4 py-6">
+      <main className="max-w-[1920px] mx-auto px-2 py-4">
         <Routes>
           <Route path="/" element={<Navigate to={`/${defaultYear}`} replace />} />
           <Route path="/:year" element={<Gallery />} />
