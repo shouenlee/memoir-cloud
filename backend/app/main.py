@@ -2,7 +2,7 @@
 Memoir Cloud - FastAPI Application
 """
 
-import os
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 

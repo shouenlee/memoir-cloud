@@ -3,7 +3,6 @@ Azure Blob Storage service for photo management.
 """
 
 import json
-import os
 import re
 from typing import Optional
 from datetime import datetime

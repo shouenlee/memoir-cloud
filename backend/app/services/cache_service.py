@@ -3,7 +3,6 @@ In-memory caching service for index.json files.
 """
 
 from typing import Any, Optional
-from datetime import datetime, timedelta
 
 from cachetools import TTLCache
 
