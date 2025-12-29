@@ -4,7 +4,6 @@ GeoIP lookup service using ip-api.com.
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 import httpx
 
