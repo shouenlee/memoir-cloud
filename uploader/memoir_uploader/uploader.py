@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.progress import Progress, TaskID
 from rich.table import Table
 
-from memoir_uploader.exif import extract_exif_data, get_photo_date, DateSource
+from memoir_uploader.exif import extract_exif_data, get_photo_date
 from memoir_uploader.thumbnail import generate_thumbnail
 from memoir_uploader.converter import convert_heic_to_jpeg
 
@@ -27,11 +27,24 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 class PhotoUploader:
     """Handles uploading photos to Azure Blob Storage."""
 
+    # Content type mapping for image extensions
+    CONTENT_TYPES = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
+
     def __init__(self, connection_string: Optional[str]):
         self.connection_string = connection_string
         self.blob_service = None
         if connection_string:
             self.blob_service = BlobServiceClient.from_connection_string(connection_string)
+
+    def _get_content_type(self, extension: str) -> str:
+        """Get content type for file extension."""
+        return self.CONTENT_TYPES.get(extension.lower(), "application/octet-stream")
 
     def _get_quarter(self, month: int) -> int:
         """Get quarter number from month."""
@@ -101,7 +114,6 @@ class PhotoUploader:
         recursive: bool = False,
         skip_duplicates: bool = False,
         override_date: Optional[datetime] = None,
-        skip_no_date: bool = False,
     ) -> None:
         """Upload all photos from a folder."""
         photos = self._scan_for_photos(folder, recursive)
@@ -112,38 +124,41 @@ class PhotoUploader:
 
         console.print(f"📷 Found {len(photos)} photos")
 
-        # Analyze dates and warn about files with no reliable date
+        # Filter out photos without valid dates (no JSON metadata)
         no_date_files: List[Path] = []
+        valid_photos: List[Path] = []
+        
         if not override_date:
             for photo in photos:
-                _, source = get_photo_date(photo, return_source=True)
-                if source == DateSource.FILE_MTIME:
+                date = get_photo_date(photo)
+                if date is None:
                     no_date_files.append(photo)
+                else:
+                    valid_photos.append(photo)
             
             if no_date_files:
-                console.print(f"\n[yellow]⚠️  {len(no_date_files)} files have no EXIF or filename date:[/yellow]")
+                console.print(f"\n[yellow]⚠️  {len(no_date_files)} files have no JSON metadata (skipping):[/yellow]")
                 for f in no_date_files[:10]:
                     console.print(f"   - {f.name}")
                 if len(no_date_files) > 10:
                     console.print(f"   ... and {len(no_date_files) - 10} more")
-                console.print("[yellow]   These will use file modification time (often unreliable).[/yellow]")
-                console.print("[yellow]   Consider using --date YYYY-MM-DD to set a specific date.[/yellow]\n")
-                
-                if skip_no_date:
-                    console.print(f"[yellow]Skipping {len(no_date_files)} files with no date (--skip-no-date)[/yellow]\n")
-                    photos = [p for p in photos if p not in no_date_files]
+                console.print("[yellow]   Ensure each photo has a .supplemental-metadata.json sidecar file.[/yellow]\n")
+            
+            photos = valid_photos
+        
+        if not photos:
+            console.print("⚠️  No photos with valid dates to upload")
+            return
 
         if dry_run:
             console.print("\n[yellow]DRY RUN - No files will be uploaded[/yellow]\n")
             for photo in photos:
                 if override_date:
                     date = override_date
-                    source = "override"
                 else:
-                    date, source = get_photo_date(photo, return_source=True)
+                    date = get_photo_date(photo)
                 container = self._get_container_name(date)
-                source_indicator = f"[dim]({source})[/dim]" if source == DateSource.FILE_MTIME else ""
-                console.print(f"  {photo.name} → {container} {source_indicator}")
+                console.print(f"  {photo.name} → {container}")
             return
 
         # Group photos by target container
@@ -151,17 +166,15 @@ class PhotoUploader:
         for photo in photos:
             if override_date:
                 date = override_date
-                source = "override"
             else:
-                date, source = get_photo_date(photo, return_source=True)
+                date = get_photo_date(photo)
             container = self._get_container_name(date)
-            by_container.setdefault(container, []).append((photo, date, source))
+            by_container.setdefault(container, []).append((photo, date))
 
         # Upload photos
         uploaded = 0
         skipped = 0
         errors = 0
-        no_date_uploaded = 0
 
         with Progress() as progress:
             task = progress.add_task("Uploading photos...", total=len(photos))
@@ -171,7 +184,7 @@ class PhotoUploader:
                 index = self._get_container_index(container_client)
                 existing_hashes = {p.get("hash") for p in index["photos"] if p.get("hash")}
 
-                for photo_path, photo_date, date_source in container_photos:
+                for photo_path, photo_date in container_photos:
                     try:
                         # Check for duplicates
                         if skip_duplicates:
@@ -192,19 +205,13 @@ class PhotoUploader:
                         
                         # Add hash for duplicate detection
                         result["hash"] = file_hash
-                        # Track date source
-                        result["dateSource"] = date_source
                         
                         # Add to index
                         index["photos"].append(result)
                         existing_hashes.add(file_hash)
                         
                         uploaded += 1
-                        if date_source == DateSource.FILE_MTIME:
-                            no_date_uploaded += 1
-                            console.print(f"✅ Uploaded: {photo_path.name} [dim](date from file mtime)[/dim]")
-                        else:
-                            console.print(f"✅ Uploaded: {photo_path.name}")
+                        console.print(f"✅ Uploaded: {photo_path.name}")
 
                     except Exception as e:
                         errors += 1
@@ -217,8 +224,6 @@ class PhotoUploader:
 
         # Summary
         console.print(f"\n📊 Summary: {uploaded} uploaded, {skipped} skipped, {errors} errors")
-        if no_date_uploaded > 0:
-            console.print(f"[yellow]⚠️  {no_date_uploaded} photos used file modification time (may be inaccurate)[/yellow]")
 
     def _upload_single_photo(
         self, container_client: ContainerClient, photo_path: Path, photo_id: str, taken_at: datetime
@@ -243,22 +248,31 @@ class PhotoUploader:
         with Image.open(original_path) as img:
             width, height = img.size
 
-        # Upload original
+        # Upload original with cache headers (images are immutable, cache for 1 year)
         original_blob_name = f"originals/{photo_id}{original_ext}"
+        content_type = self._get_content_type(original_ext)
         with open(original_path, "rb") as f:
             container_client.upload_blob(
                 original_blob_name,
                 f,
                 overwrite=True,
+                content_settings=ContentSettings(
+                    content_type=content_type,
+                    cache_control="public, max-age=31536000, immutable",
+                ),
             )
 
-        # Upload thumbnail
+        # Upload thumbnail with cache headers
         thumbnail_blob_name = f"thumbnails/{photo_id}_thumb.webp"
         with open(thumbnail_path, "rb") as f:
             container_client.upload_blob(
                 thumbnail_blob_name,
                 f,
                 overwrite=True,
+                content_settings=ContentSettings(
+                    content_type="image/webp",
+                    cache_control="public, max-age=31536000, immutable",
+                ),
             )
 
         # Clean up temp files

@@ -36,14 +36,17 @@ def config(connection_string: str):
 @click.option("--dry-run", is_flag=True, help="Preview without uploading")
 @click.option("--recursive", "-r", is_flag=True, help="Include subdirectories")
 @click.option("--skip-duplicates", is_flag=True, help="Skip photos already in storage")
-@click.option("--skip-no-date", is_flag=True, help="Skip photos with no EXIF or filename date")
 @click.option(
     "--date",
     type=click.DateTime(formats=["%Y-%m-%d"]),
-    help="Override date for photos without EXIF (YYYY-MM-DD)",
+    help="Override date for all photos (YYYY-MM-DD)",
 )
-def upload(folder: Path, dry_run: bool, recursive: bool, skip_duplicates: bool, skip_no_date: bool, date: datetime):
-    """Upload photos from a folder to blob storage."""
+def upload(folder: Path, dry_run: bool, recursive: bool, skip_duplicates: bool, date: datetime):
+    """Upload photos from a folder to blob storage.
+    
+    Photos must have a Google Takeout JSON sidecar file (.supplemental-metadata.json)
+    with photoTakenTime metadata. Photos without valid JSON metadata will be skipped.
+    """
     config_data = load_config()
     
     # Allow dry-run without connection string
@@ -61,7 +64,6 @@ def upload(folder: Path, dry_run: bool, recursive: bool, skip_duplicates: bool, 
             recursive=recursive,
             skip_duplicates=skip_duplicates,
             override_date=date,
-            skip_no_date=skip_no_date,
         )
     except Exception as e:
         click.echo(f"❌ Upload failed: {e}")
@@ -199,6 +201,70 @@ def clear(force: bool, container: str):
         blob_service.delete_container(name)
     
     click.echo(f"\n✅ Cleared {len(containers_to_delete)} container(s)")
+
+
+@cli.command("fix-cache-headers")
+@click.option("--container", "-c", help="Only fix a specific container (e.g., 2025-q4)")
+def fix_cache_headers(container: str):
+    """Update cache headers on existing blobs for better performance.
+    
+    Sets Cache-Control headers to enable long-term browser caching.
+    Photos are immutable so they can be cached for 1 year.
+    """
+    config_data = load_config()
+    if not config_data.get("connection_string"):
+        click.echo("❌ No connection string configured. Run: memoir-uploader config")
+        raise click.Abort()
+
+    from azure.storage.blob import BlobServiceClient, ContentSettings
+    
+    blob_service = BlobServiceClient.from_connection_string(config_data["connection_string"])
+    
+    # Content type mapping
+    content_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
+    
+    # Find photo containers
+    containers = []
+    for c in blob_service.list_containers():
+        if len(c.name) == 7 and c.name[4:6].lower() == "-q":
+            if container is None or c.name == container:
+                containers.append(c.name)
+    
+    if not containers:
+        click.echo("ℹ️  No photo containers found")
+        return
+    
+    total_updated = 0
+    for container_name in sorted(containers):
+        click.echo(f"📦 Processing {container_name}...")
+        client = blob_service.get_container_client(container_name)
+        
+        # List all blobs (excluding index.json)
+        for blob in client.list_blobs():
+            if blob.name == "index.json":
+                continue
+            
+            # Determine content type
+            ext = "." + blob.name.rsplit(".", 1)[-1].lower() if "." in blob.name else ""
+            content_type = content_types.get(ext, "application/octet-stream")
+            
+            # Update blob properties
+            blob_client = client.get_blob_client(blob.name)
+            blob_client.set_http_headers(ContentSettings(
+                content_type=content_type,
+                cache_control="public, max-age=31536000, immutable",
+            ))
+            total_updated += 1
+        
+        click.echo(f"   ✅ Updated headers")
+    
+    click.echo(f"\n✅ Updated cache headers on {total_updated} blobs")
 
 
 if __name__ == "__main__":
