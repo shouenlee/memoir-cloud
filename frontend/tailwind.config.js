@@ -17,8 +17,8 @@ export default {
             muted: '#64748b',
           },
           dark: {
-            bg: '#0f172a',
-            card: '#1e293b',
+            bg: '#1a1a1a',
+            card: '#2a2a2a',
             text: '#f1f5f9',
             muted: '#94a3b8',
           },

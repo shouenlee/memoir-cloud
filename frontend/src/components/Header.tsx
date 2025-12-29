@@ -13,23 +13,8 @@ export default function Header({ years }: HeaderProps) {
     <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2">
-            <svg
-              className="w-8 h-8 text-blue-500"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-              <circle cx="9" cy="9" r="2" />
-              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-            </svg>
-            <span className="text-xl font-semibold">Memoir Cloud</span>
-          </Link>
+          {/* Spacer for layout balance */}
+          <div className="w-8" />
 
           {/* Year tabs */}
           <nav className="hidden md:flex items-center space-x-1">

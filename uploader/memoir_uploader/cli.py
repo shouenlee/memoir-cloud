@@ -36,12 +36,13 @@ def config(connection_string: str):
 @click.option("--dry-run", is_flag=True, help="Preview without uploading")
 @click.option("--recursive", "-r", is_flag=True, help="Include subdirectories")
 @click.option("--skip-duplicates", is_flag=True, help="Skip photos already in storage")
+@click.option("--skip-no-date", is_flag=True, help="Skip photos with no EXIF or filename date")
 @click.option(
     "--date",
     type=click.DateTime(formats=["%Y-%m-%d"]),
     help="Override date for photos without EXIF (YYYY-MM-DD)",
 )
-def upload(folder: Path, dry_run: bool, recursive: bool, skip_duplicates: bool, date: datetime):
+def upload(folder: Path, dry_run: bool, recursive: bool, skip_duplicates: bool, skip_no_date: bool, date: datetime):
     """Upload photos from a folder to blob storage."""
     config_data = load_config()
     
@@ -60,6 +61,7 @@ def upload(folder: Path, dry_run: bool, recursive: bool, skip_duplicates: bool, 
             recursive=recursive,
             skip_duplicates=skip_duplicates,
             override_date=date,
+            skip_no_date=skip_no_date,
         )
     except Exception as e:
         click.echo(f"❌ Upload failed: {e}")
@@ -140,6 +142,63 @@ def photos(container: str, limit: int):
     except Exception as e:
         click.echo(f"❌ Error: {e}")
         raise click.Abort()
+
+
+@cli.command()
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation prompt")
+@click.option("--container", "-c", help="Only clear a specific container (e.g., 2025-q4)")
+def clear(force: bool, container: str):
+    """Clear all photo containers from blob storage.
+    
+    This will delete all photos and their metadata. Use with caution!
+    """
+    config_data = load_config()
+    if not config_data.get("connection_string"):
+        click.echo("❌ No connection string configured. Run: memoir-uploader config")
+        raise click.Abort()
+
+    from azure.storage.blob import BlobServiceClient
+    
+    blob_service = BlobServiceClient.from_connection_string(config_data["connection_string"])
+    
+    # Find containers to delete
+    containers_to_delete = []
+    for c in blob_service.list_containers():
+        # Match photo containers (YYYY-qN format)
+        if len(c.name) == 7 and c.name[4:6].lower() == "-q":
+            if container is None or c.name == container:
+                containers_to_delete.append(c.name)
+    
+    if not containers_to_delete:
+        if container:
+            click.echo(f"❌ Container '{container}' not found")
+        else:
+            click.echo("ℹ️  No photo containers found")
+        return
+    
+    # Show what will be deleted
+    click.echo("📦 Containers to delete:")
+    for name in sorted(containers_to_delete):
+        # Get photo count
+        try:
+            client = blob_service.get_container_client(name)
+            index_blob = client.get_blob_client("index.json")
+            import json
+            data = json.loads(index_blob.download_blob().readall())
+            count = len(data.get("photos", []))
+            click.echo(f"   - {name} ({count} photos)")
+        except Exception:
+            click.echo(f"   - {name}")
+    
+    if not force:
+        click.confirm("\n⚠️  This will permanently delete all photos. Continue?", abort=True)
+    
+    # Delete containers
+    for name in containers_to_delete:
+        click.echo(f"🗑️  Deleting {name}...")
+        blob_service.delete_container(name)
+    
+    click.echo(f"\n✅ Cleared {len(containers_to_delete)} container(s)")
 
 
 if __name__ == "__main__":

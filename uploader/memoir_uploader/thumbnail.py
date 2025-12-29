@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Tuple
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 
 THUMBNAIL_WIDTH = 400
@@ -23,6 +23,9 @@ def generate_thumbnail(photo_path: Path) -> Tuple[Path, int, int]:
         Tuple of (thumbnail_path, width, height)
     """
     with Image.open(photo_path) as img:
+        # Apply EXIF orientation (fixes upside-down/rotated photos)
+        img = ImageOps.exif_transpose(img)
+        
         # Convert to RGB if necessary (for PNG with alpha, etc.)
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
